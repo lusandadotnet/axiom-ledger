@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+option csharp_namespace = "Axiom.Ledger.Contracts.History";
+
+package history;
+
+service HistorySync {
+  rpc ApplyBalanceUpdate (BalanceUpdateRequest) returns (BalanceUpdateResponse);
+}
+
+message BalanceUpdateRequest {
+  string wallet_id = 1;
+  double current_balance = 2;
+  string currency = 3;
+  string transaction_id = 4;
+  double amount = 5;
+  string transaction_type = 6;
+  string occurred_at = 7;
+}
+
+message BalanceUpdateResponse {
+  bool accepted = 1;
+  string wallet_id = 2;
+}

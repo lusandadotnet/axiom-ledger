@@ -1,0 +1,120 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: axiomledger
+      POSTGRES_USER: axiom
+      POSTGRES_PASSWORD: axiom
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U axiom -d axiomledger"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  wallet-service:
+    build:
+      context: .
+      dockerfile: src/WalletService/Dockerfile
+    environment:
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=axiomledger;Username=axiom;Password=axiom
+      History__GrpcUrl: http://transaction-history-service:8081
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Username: guest
+      RabbitMq__Password: guest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      transaction-history-service:
+        condition: service_started
+    ports:
+      - "5101:8080"
+
+  transaction-history-service:
+    build:
+      context: .
+      dockerfile: src/TransactionHistoryService/Dockerfile
+    environment:
+      ConnectionStrings__Redis: redis:6379
+      Kestrel__Endpoints__Http__Url: http://0.0.0.0:8080
+      Kestrel__Endpoints__Http__Protocols: Http1
+      Kestrel__Endpoints__Grpc__Url: http://0.0.0.0:8081
+      Kestrel__Endpoints__Grpc__Protocols: Http2
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "5102:8080"
+      - "5103:8081"
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: src/NotificationService/Dockerfile
+    environment:
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Username: guest
+      RabbitMq__Password: guest
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  yarp-gateway:
+    build:
+      context: .
+      dockerfile: src/YarpGateway/Dockerfile
+    depends_on:
+      wallet-service:
+        condition: service_started
+      transaction-history-service:
+        condition: service_started
+    ports:
+      - "5100:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    depends_on:
+      yarp-gateway:
+        condition: service_started
+    ports:
+      - "3000:80"
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  redis_data:
