@@ -14,12 +14,12 @@
 
 | Ticket | Implementation |
 |---|---|
-| AX-001 | `WalletService`, `POST /api/withdraw`, Marten streams in Postgres, no CRUD transactions table |
-| AX-002 | `YarpGateway`, POST/GET routes, 10 requests per 10 seconds per client IP on POST |
-| AX-003 | RabbitMQ, Marten outbox document, MassTransit consumer worker |
-| AX-004 | `TransactionHistoryService`, Redis read model, gRPC sync before 200 response, `/api/history` |
-| AX-005 | React dashboard for withdrawal + current balance + recent transactions |
-| AX-006 | Single root `docker-compose.yml` with internal DNS between containers |
+| 001 | `WalletService`, `POST /api/withdraw`, Marten streams in Postgres, no CRUD transactions table |
+| 002 | `YarpGateway`, POST/GET routes, 10 requests per 10 seconds per client IP on POST |
+| 003 | RabbitMQ, Marten outbox document, MassTransit consumer worker |
+| 004 | `TransactionHistoryService`, Redis read model, gRPC sync before 200 response, `/api/history` |
+| 005 | React dashboard for withdrawal + current balance + recent transactions |
+| 006 | Single root `docker-compose.yml` with internal DNS between containers |
 
 ## Run everything
 
@@ -43,7 +43,7 @@ curl -X POST http://localhost:5100/api/withdraw \
 curl 'http://localhost:5100/api/history?walletId=11111111-1111-1111-1111-111111111111'
 ```
 
-## Persistence model
+## Model
 
 There is deliberately no `Transactions` CRUD table. A withdrawal is appended to the wallet's Marten event stream and stored in PostgreSQL's Marten tables (`mt_events` / `mt_streams`). The transaction-history service is a read model backed by Redis, not the source of truth.
 
