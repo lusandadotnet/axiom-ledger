@@ -4,12 +4,4 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Google.Protobuf" Version="3.30.2" />
-    <PackageReference Include="Grpc.Core.Api" Version="2.83.0" />
-    <PackageReference Include="Grpc.Tools" Version="2.83.0" PrivateAssets="All" />
-  </ItemGroup>
-  <ItemGroup>
-    <Protobuf Include="Protos\history.proto" GrpcServices="Both" />
-  </ItemGroup>
 </Project>

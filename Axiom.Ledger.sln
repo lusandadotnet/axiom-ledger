@@ -12,6 +12,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NotificationService", "src\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YarpGateway", "src\YarpGateway\YarpGateway.csproj", "{A1B2C3D4-E5F6-4789-8012-555555555555}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axiom.Ledger.Tests", "tests\Axiom.Ledger.Tests\Axiom.Ledger.Tests.csproj", "{A1B2C3D4-E5F6-4789-8012-666666666666}"
+EndProject
 Global
     GlobalSection(SolutionConfigurationPlatforms) = preSolution
         Debug|Any CPU = Debug|Any CPU
@@ -38,5 +40,9 @@ Global
         {A1B2C3D4-E5F6-4789-8012-555555555555}.Debug|Any CPU.Build.0 = Debug|Any CPU
         {A1B2C3D4-E5F6-4789-8012-555555555555}.Release|Any CPU.ActiveCfg = Release|Any CPU
         {A1B2C3D4-E5F6-4789-8012-555555555555}.Release|Any CPU.Build.0 = Release|Any CPU
+        {A1B2C3D4-E5F6-4789-8012-666666666666}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {A1B2C3D4-E5F6-4789-8012-666666666666}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {A1B2C3D4-E5F6-4789-8012-666666666666}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {A1B2C3D4-E5F6-4789-8012-666666666666}.Release|Any CPU.Build.0 = Release|Any CPU
     EndGlobalSection
 EndGlobal

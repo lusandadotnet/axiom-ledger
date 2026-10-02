@@ -1,105 +1,205 @@
+using System.Globalization;
 using System.Text.Json;
+using Axiom.Ledger.Contracts;
 using StackExchange.Redis;
-using Axiom.Ledger.Contracts.History;
 
 namespace TransactionHistoryService.Services;
 
 public sealed class HistoryRepository(IConnectionMultiplexer redis)
 {
-    private readonly IDatabase _database = redis.GetDatabase();
+    private const string ApplyScript = """
+        local currentVersion = redis.call('HGET', KEYS[1], 'version')
+        local incomingVersion = tonumber(ARGV[1])
 
-    public async Task ApplyAsync(
-        BalanceUpdateRequest request,
-        CancellationToken cancellationToken = default)
+        if currentVersion and incomingVersion > tonumber(currentVersion) then
+            redis.call('HSET', KEYS[1],
+                'walletId', ARGV[2],
+                'balance', ARGV[3],
+                'currency', ARGV[4],
+                'version', ARGV[1],
+                'updatedAt', ARGV[5])
+        elseif not currentVersion then
+            redis.call('HSET', KEYS[1],
+                'walletId', ARGV[2],
+                'balance', ARGV[3],
+                'currency', ARGV[4],
+                'version', ARGV[1],
+                'updatedAt', ARGV[5])
+        end
+
+        redis.call('HSET', KEYS[2], ARGV[6], ARGV[7])
+        redis.call('ZADD', KEYS[3], incomingVersion, ARGV[6])
+
+        local count = redis.call('ZCARD', KEYS[3])
+        if count > 50 then
+            local stale = redis.call('ZRANGE', KEYS[3], 0, count - 51)
+            for _, transactionId in ipairs(stale) do
+                redis.call('ZREM', KEYS[3], transactionId)
+                redis.call('HDEL', KEYS[2], transactionId)
+            end
+        end
+
+        return 1
+        """;
+
+    private readonly IDatabase database = redis.GetDatabase();
+
+    public async Task ApplyAsync(LedgerTransactionOccurred message)
     {
-        var walletKey = $"wallet:{request.WalletId}:read_model";
-        var transactionsKey = $"wallet:{request.WalletId}:recent_transactions";
+        var walletKey = GetWalletKey(message.WalletId);
+        var transactionDataKey = GetTransactionDataKey(message.WalletId);
+        var transactionVersionKey = GetTransactionVersionKey(message.WalletId);
 
         var transaction = new RecentTransaction(
-            Guid.Parse(request.TransactionId),
-            request.WalletId,
-            request.Amount,
-            request.Currency,
-            request.TransactionType,
-            request.OccurredAt);
+            message.TransactionId,
+            message.WalletId,
+            message.Amount,
+            message.Currency,
+            message.TransactionType,
+            message.OccurredAt,
+            message.LedgerVersion);
 
         var transactionJson = JsonSerializer.Serialize(transaction);
 
-        var batch = _database.CreateBatch();
-
-        var hash = new HashEntry[]
-        {
-            new("walletId", request.WalletId),
-            new("balance", request.CurrentBalance),
-            new("currency", request.Currency),
-            new("updatedAt", request.OccurredAt)
-        };
-
-        batch.HashSetAsync(walletKey, hash);
-        batch.ListLeftPushAsync(transactionsKey, transactionJson);
-        batch.ListTrimAsync(transactionsKey, 0, 49);
-
-        batch.Execute();
+        await database.ScriptEvaluateAsync(
+            ApplyScript,
+            new RedisKey[] { walletKey, transactionDataKey, transactionVersionKey },
+            new RedisValue[]
+            {
+                message.LedgerVersion,
+                message.WalletId.ToString(),
+                message.BalanceAfter.ToString(CultureInfo.InvariantCulture),
+                message.Currency,
+                message.OccurredAt.ToString("O"),
+                message.TransactionId.ToString(),
+                transactionJson
+            });
     }
 
     public async Task<HistoryResponse> GetHistoryAsync(
         Guid walletId,
-        CancellationToken cancellationToken)
+        string fallbackCurrency,
+        CancellationToken cancellationToken = default)
     {
-        var walletKey = $"wallet:{walletId}:read_model";
-        var transactionsKey = $"wallet:{walletId}:recent_transactions";
+        var walletKey = GetWalletKey(walletId);
+        var transactionDataKey = GetTransactionDataKey(walletId);
+        var transactionVersionKey = GetTransactionVersionKey(walletId);
 
-        var hashTask = _database.HashGetAllAsync(walletKey);
-        var transactionsTask = _database.ListRangeAsync(transactionsKey, 0, 49);
+        var hashTask = database.HashGetAllAsync(walletKey);
+        var versionedIdsTask = database.SortedSetRangeByRankAsync(
+            transactionVersionKey,
+            0,
+            49,
+            Order.Descending);
 
-        await Task.WhenAll(hashTask, transactionsTask);
+        await Task.WhenAll(hashTask, versionedIdsTask);
 
         var hash = await hashTask;
+        var transactionIds = await versionedIdsTask;
 
-        var transactions = (await transactionsTask)
-            .Where(x => x.HasValue)
-            .Select(x => JsonSerializer.Deserialize<RecentTransaction>(x!)!)
-            .ToArray();
+        var transactionPayloads = transactionIds.Length == 0
+            ? []
+            : await database.HashGetAsync(transactionDataKey, transactionIds);
 
-        var balance = 0d;
-        var currency = "ZAR";
+        var transactions = new List<RecentTransaction>(transactionPayloads.Length);
 
-        var balanceValue = hash
-            .FirstOrDefault(x => x.Name == "balance")
-            .Value;
-
-        if (balanceValue.HasValue)
+        foreach (var payload in transactionPayloads)
         {
-            double.TryParse(balanceValue!, out balance);
+            if (!payload.HasValue)
+                continue;
+
+            var transaction = JsonSerializer.Deserialize<RecentTransaction>(payload.ToString());
+            if (transaction is not null)
+                transactions.Add(transaction);
         }
 
-        var currencyValue = hash
-            .FirstOrDefault(x => x.Name == "currency")
-            .Value;
+        transactions.Sort((left, right) => right.LedgerVersion.CompareTo(left.LedgerVersion));
 
-        if (currencyValue.HasValue)
-        {
-            currency = currencyValue!;
-        }
+        var balance = GetDecimal(hash, "balance", 0m);
+        var currency = GetString(hash, "currency", fallbackCurrency);
+        var version = GetLong(hash, "version", 0L);
 
         return new HistoryResponse(
             walletId,
             balance,
             currency,
+            version,
             transactions);
+    }
+
+    public async Task RebuildAsync(WalletProjectionData source)
+    {
+        var walletKey = GetWalletKey(source.WalletId);
+        var transactionDataKey = GetTransactionDataKey(source.WalletId);
+        var transactionVersionKey = GetTransactionVersionKey(source.WalletId);
+
+        await database.KeyDeleteAsync(new RedisKey[]
+        {
+            walletKey,
+            transactionDataKey,
+            transactionVersionKey
+        });
+
+        foreach (var transaction in source.Transactions.OrderBy(x => x.LedgerVersion))
+            await ApplyAsync(transaction);
+
+        await database.HashSetAsync(walletKey, new HashEntry[]
+        {
+            new("walletId", source.WalletId.ToString()),
+            new("balance", source.CurrentBalance.ToString(CultureInfo.InvariantCulture)),
+            new("currency", source.Currency),
+            new("version", source.CurrentVersion),
+            new("updatedAt", DateTimeOffset.UtcNow.ToString("O"))
+        });
+    }
+
+    private static string GetWalletKey(Guid walletId) => $"wallet:{walletId}:read_model";
+    private static string GetTransactionDataKey(Guid walletId) => $"wallet:{walletId}:transactions";
+    private static string GetTransactionVersionKey(Guid walletId) => $"wallet:{walletId}:transaction_versions";
+
+    private static string GetString(IEnumerable<HashEntry> hash, string name, string fallback)
+    {
+        var value = hash.FirstOrDefault(x => x.Name == name).Value;
+        return value.HasValue ? value.ToString() : fallback;
+    }
+
+    private static decimal GetDecimal(IEnumerable<HashEntry> hash, string name, decimal fallback)
+    {
+        var value = hash.FirstOrDefault(x => x.Name == name).Value;
+
+        return value.HasValue
+            && decimal.TryParse(
+                value.ToString(),
+                NumberStyles.Number,
+                CultureInfo.InvariantCulture,
+                out var result)
+            ? result
+            : fallback;
+    }
+
+    private static long GetLong(IEnumerable<HashEntry> hash, string name, long fallback)
+    {
+        var value = hash.FirstOrDefault(x => x.Name == name).Value;
+
+        return value.HasValue
+            && long.TryParse(value.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var result)
+            ? result
+            : fallback;
     }
 
     public sealed record HistoryResponse(
         Guid WalletId,
-        double Balance,
+        decimal Balance,
         string Currency,
+        long Version,
         IReadOnlyList<RecentTransaction> Transactions);
 
     public sealed record RecentTransaction(
         Guid TransactionId,
-        string WalletId,
-        double Amount,
+        Guid WalletId,
+        decimal Amount,
         string Currency,
         string Type,
-        string OccurredAt);
+        DateTimeOffset OccurredAt,
+        long LedgerVersion);
 }

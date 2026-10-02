@@ -23,13 +23,14 @@ public sealed class OutboxPublisherWorker(
                 logger.LogError(ex, "Outbox drain failed");
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
+            await Task.Delay(TimeSpan.FromMilliseconds(500), stoppingToken);
         }
     }
 
     private async Task DrainAsync(CancellationToken cancellationToken)
     {
         await using var session = store.LightweightSession();
+
         var messages = await session.Query<OutboxMessage>()
             .OrderBy(x => x.OccurredAt)
             .Take(50)
@@ -37,14 +38,28 @@ public sealed class OutboxPublisherWorker(
 
         foreach (var message in messages)
         {
-            if (message.Type == nameof(WithdrawalRequested))
+            switch (message.Type)
             {
-                var payload = JsonSerializer.Deserialize<WithdrawalRequested>(message.Payload)
-                    ?? throw new InvalidOperationException($"Invalid outbox payload {message.Id}");
+                case nameof(LedgerTransactionOccurred):
+                    var payload = JsonSerializer.Deserialize<LedgerTransactionOccurred>(message.Payload)
+                        ?? throw new InvalidOperationException($"Invalid outbox payload {message.Id}");
 
-                await publishEndpoint.Publish(payload, cancellationToken);
-                session.Delete<OutboxMessage>(message.Id);
-                logger.LogInformation("Published withdrawal {TransactionId}", payload.TransactionId);
+                    await publishEndpoint.Publish(payload, cancellationToken);
+                    session.Delete<OutboxMessage>(message.Id);
+
+                    logger.LogInformation(
+                        "Published transaction {TransactionId} version {LedgerVersion}",
+                        payload.TransactionId,
+                        payload.LedgerVersion);
+                    break;
+
+                default:
+                    logger.LogWarning(
+                        "Dropping unknown outbox message type {Type} with id {MessageId}",
+                        message.Type,
+                        message.Id);
+                    session.Delete<OutboxMessage>(message.Id);
+                    break;
             }
         }
 

@@ -4,9 +4,9 @@ services:
     environment:
       POSTGRES_DB: axiomledger
       POSTGRES_USER: axiom
-      POSTGRES_PASSWORD: axiom
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-axiom}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -18,11 +18,10 @@ services:
   rabbitmq:
     image: rabbitmq:4-management-alpine
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-axiom}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-axiom}
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "127.0.0.1:15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -34,7 +33,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -48,20 +47,15 @@ services:
       context: .
       dockerfile: src/WalletService/Dockerfile
     environment:
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=axiomledger;Username=axiom;Password=axiom
-      History__GrpcUrl: http://transaction-history-service:8081
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=axiomledger;Username=axiom;Password=${POSTGRES_PASSWORD:-axiom}
       RabbitMq__Host: rabbitmq
-      RabbitMq__Username: guest
-      RabbitMq__Password: guest
+      RabbitMq__Username: ${RABBITMQ_USER:-axiom}
+      RabbitMq__Password: ${RABBITMQ_PASSWORD:-axiom}
     depends_on:
       postgres:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      transaction-history-service:
-        condition: service_started
-    ports:
-      - "5101:8080"
 
   transaction-history-service:
     build:
@@ -69,16 +63,19 @@ services:
       dockerfile: src/TransactionHistoryService/Dockerfile
     environment:
       ConnectionStrings__Redis: redis:6379
-      Kestrel__Endpoints__Http__Url: http://0.0.0.0:8080
-      Kestrel__Endpoints__Http__Protocols: Http1
-      Kestrel__Endpoints__Grpc__Url: http://0.0.0.0:8081
-      Kestrel__Endpoints__Grpc__Protocols: Http2
+      WalletService__BaseUrl: http://wallet-service:8080
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Username: ${RABBITMQ_USER:-axiom}
+      RabbitMq__Password: ${RABBITMQ_PASSWORD:-axiom}
     depends_on:
       redis:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      wallet-service:
+        condition: service_started
     ports:
-      - "5102:8080"
-      - "5103:8081"
+      - "127.0.0.1:5102:8080"
 
   notification-service:
     build:
@@ -86,8 +83,8 @@ services:
       dockerfile: src/NotificationService/Dockerfile
     environment:
       RabbitMq__Host: rabbitmq
-      RabbitMq__Username: guest
-      RabbitMq__Password: guest
+      RabbitMq__Username: ${RABBITMQ_USER:-axiom}
+      RabbitMq__Password: ${RABBITMQ_PASSWORD:-axiom}
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -102,7 +99,7 @@ services:
       transaction-history-service:
         condition: service_started
     ports:
-      - "5100:8080"
+      - "127.0.0.1:5100:8080"
 
   frontend:
     build:
@@ -112,7 +109,7 @@ services:
       yarp-gateway:
         condition: service_started
     ports:
-      - "3000:80"
+      - "127.0.0.1:3000:80"
 
 volumes:
   postgres_data:
