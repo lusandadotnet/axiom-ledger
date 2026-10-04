@@ -3,11 +3,15 @@ using System.Text;
 using System.Text.Json;
 using Axiom.Ledger.Contracts;
 using Marten;
-using Marten.Exceptions;
+using Weasel.Core;              
+using Marten.Events; 
+using JasperFx;  
+using JasperFx.Events.Projections;
+using JasperFx.Events;          
 using MassTransit;
 using WalletService.Domain;
 using WalletService.Infrastructure;
-using Weasel.Core;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -84,7 +88,7 @@ app.MapPost("/api/wallets", async (
     {
         await session.SaveChangesAsync(cancellationToken);
     }
-    catch (ConcurrencyException)
+    catch (JasperFx.ConcurrencyException)
     {
         return Results.Conflict(new { error = "Wallet creation conflicted with another request. Please try again." });
     }
@@ -306,7 +310,7 @@ static async Task<IResult> ProcessTransactionAsync(
 
         var transactionId = Guid.NewGuid();
         var occurredAt = DateTimeOffset.UtcNow;
-        var ledgerVersion = stream.CurrentVersion + 1;
+        var ledgerVersion = (stream.CurrentVersion ?? 0L) + 1L;
 
         object domainEvent = operation switch
         {
@@ -379,12 +383,12 @@ static async Task<IResult> ProcessTransactionAsync(
                 occurredAt
             });
         }
-        catch (ConcurrencyException) when (attempt == 0)
+        catch (JasperFx.ConcurrencyException) when (attempt == 0)
         {
             // Re-read the wallet and retry once. A duplicate idempotency key will
             // return the already committed result on the next attempt.
         }
-        catch (ConcurrencyException)
+        catch (JasperFx.ConcurrencyException)
         {
             return Results.Conflict(new
             {

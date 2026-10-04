@@ -1,0 +1,81 @@
+ Image axiom-ledger-wallet-service Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 584B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 455B done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for mcr.microsoft.com/dotnet/aspnet:10.0
+#3 DONE 0.1s
+
+#4 [internal] load metadata for mcr.microsoft.com/dotnet/sdk:10.0
+#4 DONE 0.1s
+
+#5 [internal] load .dockerignore
+#5 transferring context: 93B done
+#5 DONE 0.0s
+
+#6 [build 1/5] FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:e70cdb7f80b0348f5cb85f19a8f670fca061f033d57eed12fa003d58b0e06317
+#6 resolve mcr.microsoft.com/dotnet/sdk:10.0@sha256:e70cdb7f80b0348f5cb85f19a8f670fca061f033d57eed12fa003d58b0e06317 0.0s done
+#6 DONE 0.0s
+
+#7 [build 2/5] WORKDIR /src
+#7 CACHED
+
+#8 [final 1/3] FROM mcr.microsoft.com/dotnet/aspnet:10.0@sha256:222759b391a1aaf241166672c8f99b2d4ada452e7b5319f3c6e8f265a37b5ad4
+#8 resolve mcr.microsoft.com/dotnet/aspnet:10.0@sha256:222759b391a1aaf241166672c8f99b2d4ada452e7b5319f3c6e8f265a37b5ad4 0.0s done
+#8 DONE 0.0s
+
+#9 [final 2/3] WORKDIR /app
+#9 CACHED
+
+#10 [internal] load build context
+#10 transferring context: 3.09kB done
+#10 DONE 0.0s
+
+#11 [build 3/5] COPY src/ src/
+#11 DONE 0.1s
+
+#12 [build 4/5] RUN dotnet restore src/WalletService/WalletService.csproj
+#12 1.132   Determining projects to restore...
+#12 6.046   Restored /src/src/Contracts/Contracts.csproj (in 4.49 sec).
+#12 6.492   Restored /src/src/WalletService/WalletService.csproj (in 4.94 sec).
+#12 DONE 8.9s
+
+#13 [build 5/5] RUN dotnet publish src/WalletService/WalletService.csproj -c Release -o /app/publish --no-restore
+#13 3.874   Contracts -> /src/src/Contracts/bin/Release/net8.0/Contracts.dll
+#13 7.118 /src/src/WalletService/Program.cs(25,43): error CS0103: The name 'AutoCreate' does not exist in the current context [/src/src/WalletService/WalletService.csproj]
+#13 7.118 /src/src/WalletService/Program.cs(28,51): error CS0103: The name 'SnapshotLifecycle' does not exist in the current context [/src/src/WalletService/WalletService.csproj]
+#13 7.118 /src/src/WalletService/Program.cs(343,13): error CS1503: Argument 7: cannot convert from 'long?' to 'long' [/src/src/WalletService/WalletService.csproj]
+#13 7.118 /src/src/WalletService/Program.cs(358,29): error CS0266: Cannot implicitly convert type 'long?' to 'long'. An explicit conversion exists (are you missing a cast?) [/src/src/WalletService/WalletService.csproj]
+#13 7.118 /src/src/WalletService/Program.cs(358,29): warning CS8629: Nullable value type may be null. [/src/src/WalletService/WalletService.csproj]
+#13 ERROR: process "/bin/sh -c dotnet publish src/WalletService/WalletService.csproj -c Release -o /app/publish --no-restore" did not complete successfully: exit code: 1
+------
+ > [build 5/5] RUN dotnet publish src/WalletService/WalletService.csproj -c Release -o /app/publish --no-restore:
+3.874   Contracts -> /src/src/Contracts/bin/Release/net8.0/Contracts.dll
+7.118 /src/src/WalletService/Program.cs(25,43): error CS0103: The name 'AutoCreate' does not exist in the current context [/src/src/WalletService/WalletService.csproj]
+7.118 /src/src/WalletService/Program.cs(28,51): error CS0103: The name 'SnapshotLifecycle' does not exist in the current context [/src/src/WalletService/WalletService.csproj]
+7.118 /src/src/WalletService/Program.cs(343,13): error CS1503: Argument 7: cannot convert from 'long?' to 'long' [/src/src/WalletService/WalletService.csproj]
+7.118 /src/src/WalletService/Program.cs(358,29): error CS0266: Cannot implicitly convert type 'long?' to 'long'. An explicit conversion exists (are you missing a cast?) [/src/src/WalletService/WalletService.csproj]
+7.118 /src/src/WalletService/Program.cs(358,29): warning CS8629: Nullable value type may be null. [/src/src/WalletService/WalletService.csproj]
+------
+Dockerfile:5
+
+--------------------
+
+   3 |     COPY src/ src/
+
+   4 |     RUN dotnet restore src/WalletService/WalletService.csproj
+
+   5 | >>> RUN dotnet publish src/WalletService/WalletService.csproj -c Release -o /app/publish --no-restore
+
+   6 |     
+
+   7 |     FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+
+--------------------
+
+failed to solve: process "/bin/sh -c dotnet publish src/WalletService/WalletService.csproj -c Release -o /app/publish --no-restore" did not complete successfully: exit code: 1
+

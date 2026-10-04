@@ -10,8 +10,6 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
         ForwardedHeaders.XForwardedProto;
 
     // The only HTTP proxy in the compose network is the local nginx container.
-    // If this gateway is exposed directly in another environment, replace this
-    // with the real proxy network or known proxy addresses.
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
 });

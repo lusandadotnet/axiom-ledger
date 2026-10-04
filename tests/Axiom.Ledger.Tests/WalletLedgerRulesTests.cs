@@ -1,3 +1,4 @@
+using Xunit;
 using Axiom.Ledger.Contracts;
 using WalletService.Domain;
 
